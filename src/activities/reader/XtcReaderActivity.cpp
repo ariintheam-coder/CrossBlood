@@ -738,6 +738,19 @@ void XtcReaderActivity::recordForwardPageTurn(const uint32_t seconds, const bool
     stats.totalPagesTurned++;
     globalStats.totalPagesTurned++;
   }
+
+  const uint32_t pagesRead = 1;
+  const uint32_t rewardGold = std::min<uint32_t>(20U, (pagesRead + (seconds / 30U)) / 4U);
+  const uint32_t healAmt = std::min<uint32_t>(8U, rewardGold);
+
+  auto& state = APP_STATE;
+  state.dungeonGold += static_cast<uint16_t>(rewardGold);
+  state.dungeonHeroHp = std::min<uint16_t>(
+      state.dungeonHeroMaxHp,
+      static_cast<uint16_t>(state.dungeonHeroHp + healAmt));
+  state.dungeonLastPagesLogged += pagesRead;
+  state.dungeonLastReadingSeconds += seconds;
+  state.saveToFile();
 }
 
 bool XtcReaderActivity::formatTimeLeftLabel(char* buf, const size_t len, const uint32_t pageToRender,
