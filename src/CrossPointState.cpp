@@ -1,152 +1,45 @@
 #include "CrossPointState.h"
 
-#include <HalStorage.h>
+#include <ArduinoJson.h>
 #include <Logging.h>
 #include <PersistableStore.h>
 #include <Serialization.h>
-#include <uzlib.h>
 
 #include <algorithm>
-#include <mutex>
-
-namespace {
-constexpr uint8_t STATE_FILE_VERSION = 5;
-constexpr char STATE_FILE_BIN[] = "/.crosspoint/state.bin";
-constexpr char STATE_FILE_JSON[] = "/.crosspoint/state.json";
-constexpr char STATE_FILE_BAK[] = "/.crosspoint/state.bin.bak";
-
-// Hash the existing JSON snapshot without retaining another serialized copy.
-class StateCrcWriter {
- public:
-  uint32_t crc = 0;
-  size_t write(uint8_t value) { return write(&value, 1); }
-  size_t write(const uint8_t* data, size_t length) {
-    crc = uzlib_crc32(data, static_cast<unsigned int>(length), crc);
-    return length;
-  }
-};
-}  // namespace
-
-bool CrossPointState::isRecentSleep(uint16_t idx, uint8_t checkCount) const {
-  const uint8_t effectiveCount = std::min(checkCount, recentSleepFill);
-  for (uint8_t i = 0; i < effectiveCount; i++) {
-    const uint8_t slot = (recentSleepPos + SLEEP_RECENT_COUNT - 1 - i) % SLEEP_RECENT_COUNT;
-    if (recentSleepImages[slot] == idx) return true;
-  }
-  return false;
-}
-
-void CrossPointState::pushRecentSleep(uint16_t idx) {
-  recentSleepImages[recentSleepPos] = idx;
-  recentSleepPos = (recentSleepPos + 1) % SLEEP_RECENT_COUNT;
-  if (recentSleepFill < SLEEP_RECENT_COUNT) recentSleepFill++;
-}
-
-void CrossPointState::clearRecentSleepHistory() {
-  std::fill_n(recentSleepImages, SLEEP_RECENT_COUNT, static_cast<uint16_t>(0));
-  recentSleepPos = 0;
-  recentSleepFill = 0;
-}
-
-void CrossPointState::setPendingOverlayResume(PendingOverlayResume value) {
-  pendingOverlayResume = std::move(value);
-  saveToFile();
-}
-
-bool CrossPointState::consumePendingOverlayResume(PendingOverlayResume& value) {
-  if (!consumePendingOverlayResumeOnce(pendingOverlayResume, value)) return false;
-  saveToFile();
-  return true;
-}
-
-void CrossPointState::pushRecentBoot(uint16_t idx) {
-  recentBootImages[recentBootPos] = idx;
-  recentBootPos = (recentBootPos + 1) % BOOT_RECENT_COUNT;
-  if (recentBootFill < BOOT_RECENT_COUNT) recentBootFill++;
-}
-
-bool CrossPointState::saveToFile() const {
-  std::lock_guard<std::mutex> storeLock(storeMutex);
-  std::lock_guard<std::mutex> stateLock(_mutex);
-  JsonDocument doc;
-  toJson(doc);
-  StateCrcWriter checksum;
-  serializeJson(doc, checksum);
-  if (lastSavedCrcValid && checksum.crc == lastSavedCrc && Storage.exists(STATE_FILE_JSON)) return true;
-
-  if (!PersistableStoreBase::writeDocToFile(STATE_FILE_JSON, doc)) {
-    lastSavedCrcValid = false;
-    return false;
-  }
-  lastSavedCrc = checksum.crc;
-  lastSavedCrcValid = true;
-  return true;
-}
-
-bool CrossPointState::loadFromFile() {
-  {
-    std::lock_guard<std::mutex> storeLock(storeMutex);
-    lastSavedCrcValid = false;
-    // Try JSON first. A reload invalidates the remembered on-disk snapshot.
-    if (Storage.exists(STATE_FILE_JSON)) {
-      JsonDocument doc;
-      if (PersistableStoreBase::readDocFromFile(STATE_FILE_JSON, doc)) {
-        std::lock_guard<std::mutex> stateLock(_mutex);
-        return fromJson(doc.as<JsonVariantConst>());
-      }
-    }
-  }
-
-  // Fall back to binary migration
-  if (Storage.exists(STATE_FILE_BIN)) {
-    if (loadFromBinaryFile()) {
-      if (saveToFile()) {
-        Storage.rename(STATE_FILE_BIN, STATE_FILE_BAK);
-        LOG_DBG("CPS", "Migrated state.bin to state.json");
-        return true;
-      } else {
-        LOG_ERR("CPS", "Failed to save state during migration");
-        return false;
-      }
-    }
-  }
-
-  return false;
-}
+#include <cstring>
 
 void CrossPointState::toJson(JsonDocument& doc) const {
   doc["openEpubPath"] = openEpubPath;
   doc["favoriteSleepImagePath"] = favoriteSleepImagePath;
   doc["preferredSleepFolderPath"] = preferredSleepFolderPath;
-  JsonArray recentArr = doc["recentSleepImages"].to<JsonArray>();
-  for (int i = 0; i < SLEEP_RECENT_COUNT; i++) recentArr.add(recentSleepImages[i]);
+
+  JsonArray recentSleepImagesJson = doc["recentSleepImages"].to<JsonArray>();
+  for (uint8_t i = 0; i < SLEEP_RECENT_COUNT; ++i) {
+    recentSleepImagesJson.add(recentSleepImages[i]);
+  }
   doc["recentSleepPos"] = recentSleepPos;
   doc["recentSleepFill"] = recentSleepFill;
+
   doc["favoriteBootImagePath"] = favoriteBootImagePath;
-  JsonArray recentBootArr = doc["recentBootImages"].to<JsonArray>();
-  for (int i = 0; i < BOOT_RECENT_COUNT; i++) recentBootArr.add(recentBootImages[i]);
+  JsonArray recentBootImagesJson = doc["recentBootImages"].to<JsonArray>();
+  for (uint8_t i = 0; i < BOOT_RECENT_COUNT; ++i) {
+    recentBootImagesJson.add(recentBootImages[i]);
+  }
   doc["recentBootPos"] = recentBootPos;
   doc["recentBootFill"] = recentBootFill;
+
   doc["readerActivityLoadCount"] = readerActivityLoadCount;
   doc["lastSleepFromReader"] = lastSleepFromReader;
+  doc["showBootScreen"] = showBootScreen;
+  doc["quickLockResumePending"] = quickLockResumePending;
+  doc["quickLockRestoreFrontlight"] = quickLockRestoreFrontlight;
+
   doc["pendingBookmarkSpine"] = pendingBookmarkSpine;
   doc["pendingBookmarkProgress"] = pendingBookmarkProgress;
   doc["pendingBookmarkParagraphIndex"] = pendingBookmarkParagraphIndex;
   doc["pendingClippingIndex"] = pendingClippingIndex;
-  doc["showBootScreen"] = showBootScreen;
-  doc["quickLockResumePending"] = quickLockResumePending;
-  doc["quickLockRestoreFrontlight"] = quickLockRestoreFrontlight;
-  doc["pendingOverlayOrigin"] = static_cast<uint8_t>(pendingOverlayResume.origin);
-  doc["pendingOverlayType"] = static_cast<uint8_t>(pendingOverlayResume.overlay);
-  doc["pendingOverlayTab"] = pendingOverlayResume.tab;
-  doc["pendingOverlayPane"] = pendingOverlayResume.pane;
-  doc["pendingOverlaySelection"] = pendingOverlayResume.selectedIndex;
-  doc["pendingOverlayScroll"] = pendingOverlayResume.scrollPosition;
-  doc["pendingOverlayBookPath"] = pendingOverlayResume.bookPath;
-  doc["pendingOverlayReturnHome"] = pendingOverlayResume.returnHomeAfterReaderFlow;
-  doc["pendingOverlayReaderOrientation"] = pendingOverlayResume.readerOrientation;
-  doc["pendingOverlayPreserveReaderOrientation"] = pendingOverlayResume.preserveReaderOrientation;
 
+  // Dungeon state
   doc["dungeonFloor"] = dungeonFloor;
   doc["dungeonHeroHp"] = dungeonHeroHp;
   doc["dungeonHeroMaxHp"] = dungeonHeroMaxHp;
@@ -163,112 +56,108 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   openEpubPath = doc["openEpubPath"] | "";
   favoriteSleepImagePath = doc["favoriteSleepImagePath"] | "";
   preferredSleepFolderPath = doc["preferredSleepFolderPath"] | "";
-  std::fill_n(recentSleepImages, SLEEP_RECENT_COUNT, static_cast<uint16_t>(0));
-  JsonArrayConst recentArr = doc["recentSleepImages"];
-  const int actualCount =
-      recentArr.isNull() ? 0 : std::min(static_cast<int>(recentArr.size()), static_cast<int>(SLEEP_RECENT_COUNT));
-  for (int i = 0; i < actualCount; i++) recentSleepImages[i] = recentArr[i] | static_cast<uint16_t>(0);
-  recentSleepPos = doc["recentSleepPos"] | static_cast<uint8_t>(0);
-  if (recentSleepPos >= SLEEP_RECENT_COUNT) {
-    recentSleepPos = actualCount > 0 ? recentSleepPos % SLEEP_RECENT_COUNT : 0;
+
+  std::fill_n(recentSleepImages, SLEEP_RECENT_COUNT, 0);
+  JsonArrayConst recentSleepImagesJson = doc["recentSleepImages"];
+  for (uint8_t i = 0; i < SLEEP_RECENT_COUNT && i < recentSleepImagesJson.size(); ++i) {
+    recentSleepImages[i] = recentSleepImagesJson[i] | 0;
   }
-  recentSleepFill = doc["recentSleepFill"] | static_cast<uint8_t>(0);
-  recentSleepFill = static_cast<uint8_t>(std::min(static_cast<int>(recentSleepFill), actualCount));
-  if (recentSleepFill == 0 && !doc["lastSleepImage"].isNull()) {
-    const uint8_t legacy = doc["lastSleepImage"] | static_cast<uint8_t>(UINT8_MAX);
-    if (legacy != UINT8_MAX) pushRecentSleep(static_cast<uint16_t>(legacy));
+  recentSleepPos = doc["recentSleepPos"] | 0;
+  recentSleepFill = doc["recentSleepFill"] | 0;
+
+  std::fill_n(recentBootImages, BOOT_RECENT_COUNT, 0);
+  JsonArrayConst recentBootImagesJson = doc["recentBootImages"];
+  for (uint8_t i = 0; i < BOOT_RECENT_COUNT && i < recentBootImagesJson.size(); ++i) {
+    recentBootImages[i] = recentBootImagesJson[i] | 0;
   }
-  favoriteBootImagePath = doc["favoriteBootImagePath"] | "";
-  std::fill_n(recentBootImages, BOOT_RECENT_COUNT, static_cast<uint16_t>(0));
-  JsonArrayConst recentBootArr = doc["recentBootImages"];
-  const int actualBootCount =
-      recentBootArr.isNull() ? 0
-                             : std::min(static_cast<int>(recentBootArr.size()), static_cast<int>(BOOT_RECENT_COUNT));
-  for (int i = 0; i < actualBootCount; i++) recentBootImages[i] = recentBootArr[i] | static_cast<uint16_t>(0);
-  recentBootPos = doc["recentBootPos"] | static_cast<uint8_t>(0);
-  if (recentBootPos >= BOOT_RECENT_COUNT) {
-    recentBootPos = actualBootCount > 0 ? recentBootPos % BOOT_RECENT_COUNT : 0;
-  }
-  recentBootFill = doc["recentBootFill"] | static_cast<uint8_t>(0);
-  recentBootFill = static_cast<uint8_t>(std::min(static_cast<int>(recentBootFill), actualBootCount));
-  readerActivityLoadCount = doc["readerActivityLoadCount"] | static_cast<uint8_t>(0);
+  recentBootPos = doc["recentBootPos"] | 0;
+  recentBootFill = doc["recentBootFill"] | 0;
+
+  readerActivityLoadCount = doc["readerActivityLoadCount"] | 0;
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
-  pendingBookmarkSpine = doc["pendingBookmarkSpine"] | static_cast<uint16_t>(UINT16_MAX);
-  pendingBookmarkProgress = doc["pendingBookmarkProgress"] | static_cast<float>(-1.0f);
-  pendingBookmarkParagraphIndex = doc["pendingBookmarkParagraphIndex"] | static_cast<uint16_t>(UINT16_MAX);
-  pendingClippingIndex = doc["pendingClippingIndex"] | static_cast<uint16_t>(UINT16_MAX);
   showBootScreen = doc["showBootScreen"] | true;
   quickLockResumePending = doc["quickLockResumePending"] | false;
   quickLockRestoreFrontlight = doc["quickLockRestoreFrontlight"] | false;
-  pendingOverlayResume.origin =
-      static_cast<PendingOverlayOrigin>(doc["pendingOverlayOrigin"] | static_cast<uint8_t>(0));
-  pendingOverlayResume.overlay = static_cast<PendingOverlayType>(doc["pendingOverlayType"] | static_cast<uint8_t>(0));
-  pendingOverlayResume.tab = doc["pendingOverlayTab"] | static_cast<uint8_t>(0);
-  pendingOverlayResume.pane = doc["pendingOverlayPane"] | static_cast<uint8_t>(0);
-  pendingOverlayResume.selectedIndex = doc["pendingOverlaySelection"] | static_cast<int16_t>(0);
-  pendingOverlayResume.scrollPosition = doc["pendingOverlayScroll"] | static_cast<int16_t>(0);
-  pendingOverlayResume.bookPath = doc["pendingOverlayBookPath"] | "";
-  pendingOverlayResume.returnHomeAfterReaderFlow = doc["pendingOverlayReturnHome"] | false;
-  pendingOverlayResume.readerOrientation = doc["pendingOverlayReaderOrientation"] | static_cast<uint8_t>(0);
-  pendingOverlayResume.preserveReaderOrientation = doc["pendingOverlayPreserveReaderOrientation"] | false;
 
-  dungeonFloor = doc["dungeonFloor"] | static_cast<uint16_t>(1);
-  dungeonHeroHp = doc["dungeonHeroHp"] | static_cast<uint16_t>(20);
-  dungeonHeroMaxHp = doc["dungeonHeroMaxHp"] | static_cast<uint16_t>(20);
-  dungeonHeroAttack = doc["dungeonHeroAttack"] | static_cast<uint16_t>(5);
-  dungeonHeroDefense = doc["dungeonHeroDefense"] | static_cast<uint16_t>(2);
-  dungeonHeroEnergy = doc["dungeonHeroEnergy"] | static_cast<uint16_t>(3);
-  dungeonGold = doc["dungeonGold"] | static_cast<uint16_t>(0);
-  dungeonRelics = doc["dungeonRelics"] | static_cast<uint16_t>(0);
-  dungeonLastPagesLogged = doc["dungeonLastPagesLogged"] | static_cast<uint32_t>(0);
-  dungeonLastReadingSeconds = doc["dungeonLastReadingSeconds"] | static_cast<uint32_t>(0);
+  pendingBookmarkSpine = doc["pendingBookmarkSpine"] | UINT16_MAX;
+  pendingBookmarkProgress = doc["pendingBookmarkProgress"] | -1.0f;
+  pendingBookmarkParagraphIndex = doc["pendingBookmarkParagraphIndex"] | UINT16_MAX;
+  pendingClippingIndex = doc["pendingClippingIndex"] | UINT16_MAX;
+
+  dungeonFloor = doc["dungeonFloor"] | 1;
+  dungeonHeroHp = doc["dungeonHeroHp"] | 20;
+  dungeonHeroMaxHp = doc["dungeonHeroMaxHp"] | 20;
+  dungeonHeroAttack = doc["dungeonHeroAttack"] | 5;
+  dungeonHeroDefense = doc["dungeonHeroDefense"] | 2;
+  dungeonHeroEnergy = doc["dungeonHeroEnergy"] | 3;
+  dungeonGold = doc["dungeonGold"] | 0;
+  dungeonRelics = doc["dungeonRelics"] | 0;
+  dungeonLastPagesLogged = doc["dungeonLastPagesLogged"] | 0;
+  dungeonLastReadingSeconds = doc["dungeonLastReadingSeconds"] | 0;
+
   return true;
 }
 
-bool CrossPointState::loadFromBinaryFile() {
-  HalFile inputFile;
-  if (!Storage.openFileForRead("CPS", STATE_FILE_BIN, inputFile)) {
+bool CrossPointState::saveToFile() const {
+  JsonDocument doc;
+  toJson(doc);
+  return PersistableStoreBase::writeDocToFile(getFilePath(), doc);
+}
+
+bool CrossPointState::loadFromFile() {
+  JsonDocument doc;
+  if (!PersistableStoreBase::readDocFromFile(getFilePath(), doc)) {
     return false;
   }
-  std::lock_guard<std::mutex> lock(_mutex);
+  return fromJson(doc.as<JsonVariantConst>());
+}
 
-  uint8_t version;
-  serialization::readPod(inputFile, version);
-  if (version > STATE_FILE_VERSION) {
-    LOG_ERR("CPS", "Deserialization failed: Unknown version %u", version);
+void CrossPointState::pushRecentSleep(uint16_t idx) {
+  recentSleepImages[recentSleepPos] = idx;
+  recentSleepPos = (recentSleepPos + 1) % SLEEP_RECENT_COUNT;
+  if (recentSleepFill < SLEEP_RECENT_COUNT) {
+    recentSleepFill++;
+  }
+}
+
+void CrossPointState::clearRecentSleepHistory() {
+  std::fill_n(recentSleepImages, SLEEP_RECENT_COUNT, 0);
+  recentSleepPos = 0;
+  recentSleepFill = 0;
+}
+
+void CrossPointState::pushRecentBoot(uint16_t idx) {
+  recentBootImages[recentBootPos] = idx;
+  recentBootPos = (recentBootPos + 1) % BOOT_RECENT_COUNT;
+  if (recentBootFill < BOOT_RECENT_COUNT) {
+    recentBootFill++;
+  }
+}
+
+bool CrossPointState::consumePendingOverlayResume(PendingOverlayResume& value) {
+  if (pendingOverlayResume.isEmpty()) {
     return false;
   }
+  value = pendingOverlayResume;
+  pendingOverlayResume = {};
+  return true;
+}
 
-  serialization::readString(inputFile, openEpubPath);
-  if (version >= 2) {
-    uint8_t legacyLastSleep = UINT8_MAX;
-    serialization::readPod(inputFile, legacyLastSleep);
-    if (legacyLastSleep != UINT8_MAX) {
-      pushRecentSleep(static_cast<uint16_t>(legacyLastSleep));
+void CrossPointState::setPendingOverlayResume(PendingOverlayResume value) {
+  pendingOverlayResume = value;
+}
+
+bool CrossPointState::isRecentSleep(uint16_t idx, uint8_t checkCount) const {
+  const uint8_t effective = std::min(checkCount, recentSleepFill);
+  for (uint8_t i = 0; i < effective; ++i) {
+    const uint8_t slot = (recentSleepPos + SLEEP_RECENT_COUNT - 1 - i) % SLEEP_RECENT_COUNT;
+    if (recentSleepImages[slot] == idx) {
+      return true;
     }
   }
+  return false;
+}
 
-  if (version >= 3) {
-    serialization::readPod(inputFile, readerActivityLoadCount);
-  }
-
-  if (version >= 4) {
-    serialization::readPod(inputFile, lastSleepFromReader);
-  } else {
-    lastSleepFromReader = false;
-  }
-
-  if (version >= 5) {
-    serialization::readPod(inputFile, pendingBookmarkSpine);
-    serialization::readPod(inputFile, pendingBookmarkProgress);
-    pendingBookmarkParagraphIndex = UINT16_MAX;
-    pendingClippingIndex = UINT16_MAX;
-  } else {
-    pendingBookmarkSpine = UINT16_MAX;
-    pendingBookmarkProgress = -1.0f;
-    pendingBookmarkParagraphIndex = UINT16_MAX;
-    pendingClippingIndex = UINT16_MAX;
-  }
-
-  return true;
+bool CrossPointState::loadFromBinaryFile() {
+  return false;
 }
