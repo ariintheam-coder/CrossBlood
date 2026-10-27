@@ -739,17 +739,25 @@ void XtcReaderActivity::recordForwardPageTurn(const uint32_t seconds, const bool
     globalStats.totalPagesTurned++;
   }
 
-  const uint32_t pagesRead = 1;
-  const uint32_t rewardGold = std::min<uint32_t>(20U, (pagesRead + (seconds / 30U)) / 4U);
-  const uint32_t healAmt = std::min<uint32_t>(8U, rewardGold);
+  if (seconds == 0) {
+    return;
+  }
+
+  const uint32_t goldReward = std::min<uint32_t>(20U, (1U + (seconds / 30U)) / 4U);
+  if (goldReward == 0) {
+    return;
+  }
+
+  const uint32_t healAmount = std::min<uint32_t>(8U, goldReward);
 
   auto& state = APP_STATE;
-  state.dungeonGold += static_cast<uint16_t>(rewardGold);
+  state.dungeonGold += static_cast<uint16_t>(goldReward);
+  state.dungeonLastPagesLogged += 1U;
+  state.dungeonLastReadingSeconds += seconds;
   state.dungeonHeroHp = std::min<uint16_t>(
       state.dungeonHeroMaxHp,
-      static_cast<uint16_t>(state.dungeonHeroHp + healAmt));
-  state.dungeonLastPagesLogged += pagesRead;
-  state.dungeonLastReadingSeconds += seconds;
+      static_cast<uint16_t>(state.dungeonHeroHp + static_cast<uint16_t>(healAmount)));
+
   state.saveToFile();
 }
 
