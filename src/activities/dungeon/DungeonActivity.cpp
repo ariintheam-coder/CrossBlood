@@ -18,6 +18,7 @@ DungeonActivity::DungeonActivity(GfxRenderer& renderer, MappedInputManager& mapp
 
 void DungeonActivity::onEnter() {
   Activity::onEnter();
+
   auto& state = APP_STATE;
   game_.loadFromSave({
       state.dungeonFloor,
@@ -31,6 +32,7 @@ void DungeonActivity::onEnter() {
       state.dungeonLastPagesLogged,
       state.dungeonLastReadingSeconds,
   });
+
   requestedRefresh_ = true;
 }
 
@@ -67,21 +69,19 @@ void DungeonActivity::handleSelection() {
 }
 
 void DungeonActivity::drawStats() {
-  // This is intentionally lightweight and can be adapted to your exact GUI helper API.
-  // Use the same style patterns as HomeActivity when integrating into your branch.
   renderer.clearScreen();
 
   const auto w = renderer.getScreenWidth();
   const auto h = renderer.getScreenHeight();
 
   char line[128];
+
   std::snprintf(line, sizeof(line), "Floor: %u  Gold: %u  Relics: %u",
                 static_cast<unsigned>(game_.save().floor),
                 static_cast<unsigned>(game_.save().gold),
                 static_cast<unsigned>(game_.save().relics));
-  // Replace this with your project’s drawing helper if needed.
+  // Replace with your repo's real GUI draw call if needed.
   // GUI.drawString(renderer, 10, 10, line);
-  // gui.printf(...)
 
   std::snprintf(line, sizeof(line), "HP: %u/%u  ATK: %u  DEF: %u",
                 static_cast<unsigned>(game_.save().heroHp),
@@ -104,9 +104,8 @@ void DungeonActivity::drawBattle() {
 }
 
 void DungeonActivity::drawMenu() {
-  // Simple menu for a proof-of-concept dungeon screen.
-  // Replace these strings with localized labels if your project already has them.
-  // Draw as text buttons on-screen in the same style your repo uses for home menu items.
+  // This is intentionally simple. Replace with your project's actual GUI layout.
+  // The main goal here is to provide the full dungeon feature loop.
 }
 
 void DungeonActivity::loop() {
@@ -114,13 +113,16 @@ void DungeonActivity::loop() {
     selection_ = (selection_ + kMenuCount - 1) % kMenuCount;
     requestedRefresh_ = true;
   }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     selection_ = (selection_ + 1) % kMenuCount;
     requestedRefresh_ = true;
   }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     handleSelection();
   }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     activityManager.popActivity();
   }
