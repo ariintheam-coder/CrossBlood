@@ -1,4 +1,5 @@
 #pragma once
+
 #include <ArduinoJson.h>
 #include <PersistableStore.h>
 
@@ -41,6 +42,17 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // normal Quick Lock session so its matching unlock can restore the light.
   bool quickLockRestoreFrontlight = false;
   PendingOverlayResume pendingOverlayResume{};
+
+  uint16_t dungeonFloor = 1;
+  uint16_t dungeonHeroHp = 20;
+  uint16_t dungeonHeroMaxHp = 20;
+  uint16_t dungeonHeroAttack = 5;
+  uint16_t dungeonHeroDefense = 2;
+  uint16_t dungeonHeroEnergy = 3;
+  uint16_t dungeonGold = 0;
+  uint16_t dungeonRelics = 0;
+  uint32_t dungeonLastPagesLogged = 0;
+  uint32_t dungeonLastReadingSeconds = 0;
 
   void setPendingOverlayResume(PendingOverlayResume value);
   bool consumePendingOverlayResume(PendingOverlayResume& value);

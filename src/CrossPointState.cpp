@@ -146,6 +146,17 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["pendingOverlayReturnHome"] = pendingOverlayResume.returnHomeAfterReaderFlow;
   doc["pendingOverlayReaderOrientation"] = pendingOverlayResume.readerOrientation;
   doc["pendingOverlayPreserveReaderOrientation"] = pendingOverlayResume.preserveReaderOrientation;
+
+  doc["dungeonFloor"] = dungeonFloor;
+  doc["dungeonHeroHp"] = dungeonHeroHp;
+  doc["dungeonHeroMaxHp"] = dungeonHeroMaxHp;
+  doc["dungeonHeroAttack"] = dungeonHeroAttack;
+  doc["dungeonHeroDefense"] = dungeonHeroDefense;
+  doc["dungeonHeroEnergy"] = dungeonHeroEnergy;
+  doc["dungeonGold"] = dungeonGold;
+  doc["dungeonRelics"] = dungeonRelics;
+  doc["dungeonLastPagesLogged"] = dungeonLastPagesLogged;
+  doc["dungeonLastReadingSeconds"] = dungeonLastReadingSeconds;
 }
 
 bool CrossPointState::fromJson(JsonVariantConst doc) {
@@ -200,6 +211,17 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   pendingOverlayResume.returnHomeAfterReaderFlow = doc["pendingOverlayReturnHome"] | false;
   pendingOverlayResume.readerOrientation = doc["pendingOverlayReaderOrientation"] | static_cast<uint8_t>(0);
   pendingOverlayResume.preserveReaderOrientation = doc["pendingOverlayPreserveReaderOrientation"] | false;
+
+  dungeonFloor = doc["dungeonFloor"] | static_cast<uint16_t>(1);
+  dungeonHeroHp = doc["dungeonHeroHp"] | static_cast<uint16_t>(20);
+  dungeonHeroMaxHp = doc["dungeonHeroMaxHp"] | static_cast<uint16_t>(20);
+  dungeonHeroAttack = doc["dungeonHeroAttack"] | static_cast<uint16_t>(5);
+  dungeonHeroDefense = doc["dungeonHeroDefense"] | static_cast<uint16_t>(2);
+  dungeonHeroEnergy = doc["dungeonHeroEnergy"] | static_cast<uint16_t>(3);
+  dungeonGold = doc["dungeonGold"] | static_cast<uint16_t>(0);
+  dungeonRelics = doc["dungeonRelics"] | static_cast<uint16_t>(0);
+  dungeonLastPagesLogged = doc["dungeonLastPagesLogged"] | static_cast<uint32_t>(0);
+  dungeonLastReadingSeconds = doc["dungeonLastReadingSeconds"] | static_cast<uint32_t>(0);
   return true;
 }
 
