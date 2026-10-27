@@ -24,8 +24,8 @@ struct portMUX_TYPE {};
   }
 #endif
 
-class Activity;    // forward declaration
-class RenderLock;  // forward declaration
+class Activity;
+class RenderLock;
 
 #if CROSSINK_APP_CAP_TOUCH
 struct LiveLightSwipeState {
@@ -60,6 +60,7 @@ class ActivityManager {
   MappedInputManager& mappedInput;
   std::vector<std::unique_ptr<Activity>> stackActivities;
   std::unique_ptr<Activity> currentActivity;
+
 #if CROSSINK_APP_CAP_TOUCH
   LiveLightSwipeState edgeLightSwipe;
   LiveLightSwipeState twoFingerLightSwipe;
@@ -99,7 +100,8 @@ class ActivityManager {
     assert(renderingMutex != nullptr && "Failed to create rendering mutex");
     stackActivities.reserve(10);
   }
-  ~ActivityManager() { assert(false); /* should never be called */ };
+
+  ~ActivityManager() { assert(false); };
 
   void begin(uint32_t renderTaskStackBytes = 16384);
   void loop();
