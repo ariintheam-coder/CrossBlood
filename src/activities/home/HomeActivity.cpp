@@ -32,6 +32,9 @@ struct HomeMenuEntries {
   const HomeMenuEntry& operator[](int index) const { return entries[index]; }
 };
 
+bool containsPoint(const Rect& rect, const int x, const int y) {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
 ...
 void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasReadingStats, bool hasBookmarks,
                          bool hasClippings) {
@@ -92,22 +95,63 @@ HomeMenuEntries buildSelectableHomeMenuItems(bool hasOpdsServers, bool hasReadin
   return items;
 }
 
-HomeMenuAction homeActionForInitialMenuItem(HomeMenuItem item) {
-  switch (item) {
-    case HomeMenuItem::FILE_BROWSER:
-      return HomeMenuAction::BrowseFiles;
-    case HomeMenuItem::LIBRARY:
-      return HomeMenuAction::Library;
-    case HomeMenuItem::OPDS_BROWSER:
-      return HomeMenuAction::OpdsBrowser;
-    case HomeMenuItem::FILE_TRANSFER:
-      return HomeMenuAction::FileTransfer;
-    case HomeMenuItem::SETTINGS_MENU:
-      return HomeMenuAction::Settings;
-    case HomeMenuItem::NONE:
-    default:
-      return HomeMenuAction::ContinueReading;
+auto activateMinimalMenuAction = [this, &menuItems]() {
+  switch (menuItems[minimalMenuIndex].action) {
+    case HomeMenuAction::BrowseFiles:
+      onFileBrowserOpen();
+      break;
+    case HomeMenuAction::Library:
+      onLibraryOpen();
+      break;
+    case HomeMenuAction::OpdsBrowser:
+      onOpdsBrowserOpen();
+      break;
+    case HomeMenuAction::ReadingStats:
+      onReadingStatsOpen();
+      break;
+    case HomeMenuAction::Bookmarks:
+      onSavedItemsOpen();
+      break;
+    case HomeMenuAction::FileTransfer:
+      onFileTransferOpen();
+      break;
+    case HomeMenuAction::Dungeon:
+      activityManager.goToDungeon();
+      break;
+    case HomeMenuAction::ContinueReading:
+    case HomeMenuAction::Settings:
+      break;
   }
-}
-...
-}  // namespace
+};
+
+auto activateHomeMenuAction = [this](const HomeMenuAction action) {
+  switch (action) {
+    case HomeMenuAction::BrowseFiles:
+      onFileBrowserOpen();
+      break;
+    case HomeMenuAction::ContinueReading:
+      onContinueReading();
+      break;
+    case HomeMenuAction::Library:
+      onLibraryOpen();
+      break;
+    case HomeMenuAction::OpdsBrowser:
+      onOpdsBrowserOpen();
+      break;
+    case HomeMenuAction::ReadingStats:
+      onReadingStatsOpen();
+      break;
+    case HomeMenuAction::Bookmarks:
+      onSavedItemsOpen();
+      break;
+    case HomeMenuAction::FileTransfer:
+      onFileTransferOpen();
+      break;
+    case HomeMenuAction::Dungeon:
+      activityManager.goToDungeon();
+      break;
+    case HomeMenuAction::Settings:
+      onSettingsOpen();
+      break;
+  }
+};
