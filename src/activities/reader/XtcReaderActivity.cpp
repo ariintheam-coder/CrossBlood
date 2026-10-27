@@ -739,26 +739,30 @@ void XtcReaderActivity::recordForwardPageTurn(const uint32_t seconds, const bool
     globalStats.totalPagesTurned++;
   }
 
+  // Dungeon Crawler Carl-style reward for reading.
+  // Only grant when a real forward page dwell was counted.
   if (seconds == 0) {
     return;
   }
 
-  const uint32_t goldReward = std::min<uint32_t>(20U, (1U + (seconds / 30U)) / 4U);
-  if (goldReward == 0) {
+  const uint32_t pagesRead = 1U;
+  const uint32_t rewardGold = std::min<uint32_t>(20U, (pagesRead + (seconds / 30U)) / 4U);
+  const uint32_t healAmount = std::min<uint32_t>(8U, rewardGold);
+
+  if (rewardGold == 0) {
     return;
   }
 
-  const uint32_t healAmount = std::min<uint32_t>(8U, goldReward);
+  APP_STATE.dungeonGold = static_cast<uint16_t>(
+      std::min<uint32_t>(UINT16_MAX, static_cast<uint32_t>(APP_STATE.dungeonGold) + rewardGold));
 
-  auto& state = APP_STATE;
-  state.dungeonGold += static_cast<uint16_t>(goldReward);
-  state.dungeonLastPagesLogged += 1U;
-  state.dungeonLastReadingSeconds += seconds;
-  state.dungeonHeroHp = std::min<uint16_t>(
-      state.dungeonHeroMaxHp,
-      static_cast<uint16_t>(state.dungeonHeroHp + static_cast<uint16_t>(healAmount)));
+  APP_STATE.dungeonHeroHp = static_cast<uint16_t>(std::min<uint32_t>(
+      APP_STATE.dungeonHeroMaxHp,
+      static_cast<uint32_t>(APP_STATE.dungeonHeroHp) + healAmount));
 
-  state.saveToFile();
+  APP_STATE.dungeonLastPagesLogged += pagesRead;
+  APP_STATE.dungeonLastReadingSeconds += seconds;
+  APP_STATE.saveToFile();
 }
 
 bool XtcReaderActivity::formatTimeLeftLabel(char* buf, const size_t len, const uint32_t pageToRender,
