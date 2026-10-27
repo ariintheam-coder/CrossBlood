@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 #include <string>
-#include <vector>
 
 class DungeonGame {
  public:
@@ -16,11 +15,11 @@ class DungeonGame {
 
   struct Enemy {
     std::string name;
-    uint16_t hp;
-    uint16_t maxHp;
-    uint16_t attack;
-    uint16_t goldReward;
-    uint16_t relicChance;
+    uint16_t hp = 0;
+    uint16_t maxHp = 0;
+    uint16_t attack = 0;
+    uint16_t goldReward = 0;
+    uint16_t relicChance = 0;
   };
 
   struct SaveState {
@@ -37,7 +36,6 @@ class DungeonGame {
   };
 
   DungeonGame();
-
   void reset();
   void loadFromSave(const SaveState& state);
   SaveState save() const;
@@ -45,6 +43,7 @@ class DungeonGame {
   void beginFloor();
   void applyReadingReward(uint32_t pagesRead, uint32_t secondsRead);
   bool performAction(Action action);
+
   bool isBattleActive() const;
   bool isDead() const;
   const Enemy& currentEnemy() const;
