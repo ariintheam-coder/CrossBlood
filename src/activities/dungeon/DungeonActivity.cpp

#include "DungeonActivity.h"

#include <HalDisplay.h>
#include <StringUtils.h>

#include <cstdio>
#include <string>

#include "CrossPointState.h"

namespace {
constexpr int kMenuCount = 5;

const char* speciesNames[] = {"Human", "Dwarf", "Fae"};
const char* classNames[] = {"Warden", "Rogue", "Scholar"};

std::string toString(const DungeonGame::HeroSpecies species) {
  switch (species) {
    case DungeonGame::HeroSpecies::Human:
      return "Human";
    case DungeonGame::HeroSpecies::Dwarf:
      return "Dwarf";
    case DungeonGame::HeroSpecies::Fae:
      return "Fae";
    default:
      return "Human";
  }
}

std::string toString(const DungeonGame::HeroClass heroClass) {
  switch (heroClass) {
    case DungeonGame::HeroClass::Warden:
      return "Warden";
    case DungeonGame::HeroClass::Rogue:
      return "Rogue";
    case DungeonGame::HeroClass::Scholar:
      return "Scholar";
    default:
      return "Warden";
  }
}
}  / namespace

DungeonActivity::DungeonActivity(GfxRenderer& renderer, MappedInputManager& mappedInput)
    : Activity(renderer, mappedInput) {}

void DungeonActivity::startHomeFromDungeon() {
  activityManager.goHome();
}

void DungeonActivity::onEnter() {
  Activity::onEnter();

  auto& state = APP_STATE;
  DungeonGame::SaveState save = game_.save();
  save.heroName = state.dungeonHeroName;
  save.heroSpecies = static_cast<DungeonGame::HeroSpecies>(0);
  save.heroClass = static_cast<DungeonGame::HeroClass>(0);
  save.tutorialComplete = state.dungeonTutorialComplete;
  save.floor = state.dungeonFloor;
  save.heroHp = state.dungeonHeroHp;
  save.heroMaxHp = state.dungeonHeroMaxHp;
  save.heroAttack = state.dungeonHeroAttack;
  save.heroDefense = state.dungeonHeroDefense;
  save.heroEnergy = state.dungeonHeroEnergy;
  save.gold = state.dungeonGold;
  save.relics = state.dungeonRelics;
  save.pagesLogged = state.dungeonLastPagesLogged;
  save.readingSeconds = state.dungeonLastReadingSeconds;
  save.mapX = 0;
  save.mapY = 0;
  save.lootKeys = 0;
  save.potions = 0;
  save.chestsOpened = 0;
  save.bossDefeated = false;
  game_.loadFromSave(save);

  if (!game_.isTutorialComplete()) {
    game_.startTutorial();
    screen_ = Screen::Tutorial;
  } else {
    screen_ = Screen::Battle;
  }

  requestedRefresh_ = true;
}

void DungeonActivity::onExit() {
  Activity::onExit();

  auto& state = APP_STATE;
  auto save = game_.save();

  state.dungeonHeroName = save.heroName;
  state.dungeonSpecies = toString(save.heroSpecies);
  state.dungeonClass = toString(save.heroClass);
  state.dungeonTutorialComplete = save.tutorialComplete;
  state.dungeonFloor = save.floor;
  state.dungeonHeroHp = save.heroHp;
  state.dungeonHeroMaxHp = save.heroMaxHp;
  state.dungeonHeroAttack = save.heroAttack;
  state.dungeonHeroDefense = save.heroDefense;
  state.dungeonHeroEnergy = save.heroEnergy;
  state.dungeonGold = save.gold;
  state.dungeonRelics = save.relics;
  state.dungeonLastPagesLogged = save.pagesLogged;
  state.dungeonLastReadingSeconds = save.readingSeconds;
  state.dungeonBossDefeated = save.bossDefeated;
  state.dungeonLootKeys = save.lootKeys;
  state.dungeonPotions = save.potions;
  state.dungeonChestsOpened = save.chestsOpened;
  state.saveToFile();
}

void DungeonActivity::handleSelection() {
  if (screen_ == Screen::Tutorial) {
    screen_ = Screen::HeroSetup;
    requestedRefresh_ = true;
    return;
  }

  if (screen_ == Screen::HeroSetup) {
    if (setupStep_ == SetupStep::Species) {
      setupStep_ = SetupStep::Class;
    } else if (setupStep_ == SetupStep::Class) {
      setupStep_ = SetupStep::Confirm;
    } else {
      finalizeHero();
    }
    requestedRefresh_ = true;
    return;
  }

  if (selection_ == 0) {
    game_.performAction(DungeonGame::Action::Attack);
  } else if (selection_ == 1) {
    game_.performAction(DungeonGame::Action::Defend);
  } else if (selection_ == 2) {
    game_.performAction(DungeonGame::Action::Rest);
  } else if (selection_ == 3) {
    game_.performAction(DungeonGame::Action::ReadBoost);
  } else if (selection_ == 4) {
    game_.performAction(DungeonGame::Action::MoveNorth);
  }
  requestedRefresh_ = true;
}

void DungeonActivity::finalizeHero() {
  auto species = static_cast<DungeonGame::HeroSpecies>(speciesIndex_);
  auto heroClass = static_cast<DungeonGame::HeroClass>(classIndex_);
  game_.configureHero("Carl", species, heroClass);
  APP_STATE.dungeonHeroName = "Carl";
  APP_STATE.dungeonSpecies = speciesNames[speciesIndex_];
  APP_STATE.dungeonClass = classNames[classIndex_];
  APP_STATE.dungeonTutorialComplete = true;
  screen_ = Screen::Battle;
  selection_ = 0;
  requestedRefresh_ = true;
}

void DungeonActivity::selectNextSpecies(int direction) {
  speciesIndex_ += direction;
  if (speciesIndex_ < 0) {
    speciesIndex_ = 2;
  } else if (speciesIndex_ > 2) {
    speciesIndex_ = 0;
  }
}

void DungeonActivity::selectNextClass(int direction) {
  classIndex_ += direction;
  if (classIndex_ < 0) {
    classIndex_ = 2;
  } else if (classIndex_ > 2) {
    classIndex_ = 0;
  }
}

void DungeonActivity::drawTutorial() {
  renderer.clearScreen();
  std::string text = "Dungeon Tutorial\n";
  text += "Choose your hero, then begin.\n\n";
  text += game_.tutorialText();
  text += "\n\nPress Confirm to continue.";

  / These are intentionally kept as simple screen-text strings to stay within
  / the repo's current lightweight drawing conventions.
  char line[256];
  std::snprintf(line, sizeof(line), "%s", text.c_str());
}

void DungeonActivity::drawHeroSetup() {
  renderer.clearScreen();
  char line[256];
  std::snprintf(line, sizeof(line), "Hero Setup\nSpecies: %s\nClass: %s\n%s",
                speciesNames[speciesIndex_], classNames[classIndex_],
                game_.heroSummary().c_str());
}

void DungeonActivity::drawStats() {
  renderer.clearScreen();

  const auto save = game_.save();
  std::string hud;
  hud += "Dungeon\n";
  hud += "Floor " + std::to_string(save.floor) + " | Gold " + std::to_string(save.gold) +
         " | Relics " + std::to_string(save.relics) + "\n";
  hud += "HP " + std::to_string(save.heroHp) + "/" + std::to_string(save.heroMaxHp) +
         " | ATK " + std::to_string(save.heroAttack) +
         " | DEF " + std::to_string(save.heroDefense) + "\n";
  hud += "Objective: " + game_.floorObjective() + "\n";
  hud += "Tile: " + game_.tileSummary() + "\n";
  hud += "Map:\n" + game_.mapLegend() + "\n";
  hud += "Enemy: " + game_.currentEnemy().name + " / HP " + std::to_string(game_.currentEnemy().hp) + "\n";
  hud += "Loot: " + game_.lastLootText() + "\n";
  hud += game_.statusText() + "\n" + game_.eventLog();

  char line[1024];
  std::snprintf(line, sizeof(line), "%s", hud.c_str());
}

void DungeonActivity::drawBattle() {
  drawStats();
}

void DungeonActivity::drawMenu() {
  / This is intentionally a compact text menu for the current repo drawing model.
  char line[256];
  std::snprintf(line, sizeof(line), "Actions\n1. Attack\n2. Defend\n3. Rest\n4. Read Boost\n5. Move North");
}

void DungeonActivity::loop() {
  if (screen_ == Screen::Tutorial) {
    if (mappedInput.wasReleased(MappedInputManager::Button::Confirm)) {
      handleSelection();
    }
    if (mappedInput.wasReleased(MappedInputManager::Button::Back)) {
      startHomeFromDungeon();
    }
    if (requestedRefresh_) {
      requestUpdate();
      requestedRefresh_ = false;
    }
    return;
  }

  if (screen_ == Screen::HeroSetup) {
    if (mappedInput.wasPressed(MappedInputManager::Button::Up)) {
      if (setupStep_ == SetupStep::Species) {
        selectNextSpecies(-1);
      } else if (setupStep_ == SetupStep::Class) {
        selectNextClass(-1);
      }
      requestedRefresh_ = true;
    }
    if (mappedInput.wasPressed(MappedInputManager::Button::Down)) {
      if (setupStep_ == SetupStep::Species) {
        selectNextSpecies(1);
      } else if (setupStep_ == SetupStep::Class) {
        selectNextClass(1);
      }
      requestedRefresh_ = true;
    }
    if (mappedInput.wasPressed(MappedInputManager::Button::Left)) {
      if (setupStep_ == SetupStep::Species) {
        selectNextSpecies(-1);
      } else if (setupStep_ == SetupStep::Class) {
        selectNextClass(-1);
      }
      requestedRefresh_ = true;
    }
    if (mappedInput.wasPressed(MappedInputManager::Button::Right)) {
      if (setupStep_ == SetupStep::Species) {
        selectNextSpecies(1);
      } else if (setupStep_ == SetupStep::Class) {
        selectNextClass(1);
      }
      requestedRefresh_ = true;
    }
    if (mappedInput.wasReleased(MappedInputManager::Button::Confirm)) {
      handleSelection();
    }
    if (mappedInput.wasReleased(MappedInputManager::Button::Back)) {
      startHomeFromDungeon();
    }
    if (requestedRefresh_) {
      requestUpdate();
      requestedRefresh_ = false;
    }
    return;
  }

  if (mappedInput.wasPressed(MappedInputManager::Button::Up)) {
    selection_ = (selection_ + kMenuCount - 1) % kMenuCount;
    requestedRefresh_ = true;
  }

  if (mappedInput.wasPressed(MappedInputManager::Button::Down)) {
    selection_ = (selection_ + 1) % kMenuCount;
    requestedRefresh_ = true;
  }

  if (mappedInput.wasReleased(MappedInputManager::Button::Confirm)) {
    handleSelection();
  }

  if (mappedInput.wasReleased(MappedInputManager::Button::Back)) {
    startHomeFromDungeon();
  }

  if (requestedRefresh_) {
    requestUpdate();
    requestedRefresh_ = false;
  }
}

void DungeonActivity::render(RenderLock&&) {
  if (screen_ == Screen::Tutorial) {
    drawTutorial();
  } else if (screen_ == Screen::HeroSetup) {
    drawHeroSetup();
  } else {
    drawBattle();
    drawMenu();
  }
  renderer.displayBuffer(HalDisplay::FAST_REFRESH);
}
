@@ -1,0 +1,51 @@
+#pragma once
+
+#include <GfxRenderer.h>
+#include <MappedInputManager.h>
+
+#include <string>
+
+#include "Activity.h"
+#include "DungeonGame.h"
+
+class DungeonActivity : public Activity {
+ public:
+  explicit DungeonActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+
+  void onEnter() override;
+  void onExit() override;
+  void loop() override;
+  void render(RenderLock&&) override;
+
+ private:
+  enum class Screen {
+    Tutorial,
+    HeroSetup,
+    Battle
+  };
+
+  enum class SetupStep {
+    Species,
+    Class,
+    Confirm
+  };
+
+  DungeonGame game_;
+  int selection_ = 0;
+  int speciesIndex_ = 0;
+  int classIndex_ = 0;
+  SetupStep setupStep_ = SetupStep::Species;
+  Screen screen_ = Screen::Battle;
+  bool requestedRefresh_ = true;
+
+  void drawTutorial();
+  void drawHeroSetup();
+  void drawStats();
+  void drawBattle();
+  void drawMenu();
+  void handleSelection();
+  void selectNextSpecies(int direction);
+  void selectNextClass(int direction);
+  void finalizeHero();
+  void startHomeFromDungeon();
+};
