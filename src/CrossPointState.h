@@ -39,7 +39,13 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   PendingOverlayResume pendingOverlayResume{};
 
   // Dungeon Crawler Carl-inspired state
+  std::string dungeonHeroName = "Carl";
+  std::string dungeonSpecies = "Human";
+  std::string dungeonClass = "Warden";
+  bool dungeonTutorialComplete = false;
+  bool dungeonInSafeZone = false;
   uint16_t dungeonFloor = 1;
+  uint16_t dungeonFloorTimer = 12;
   uint16_t dungeonHeroHp = 20;
   uint16_t dungeonHeroMaxHp = 20;
   uint16_t dungeonHeroAttack = 5;
